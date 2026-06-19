@@ -6,15 +6,15 @@ local AimLockSettings = Aiming.AimLock
 
 -- // Services
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 -- // Vars
 local CurrentCamera = Workspace.CurrentCamera
+local AimEnabled = false -- Estado inicial: Apagado
 
 local DaHoodSettings = {
     Prediction = 0.165,
-
     SilentAim = true,
-
     AimLock = AimLockSettings,
     BeizerLock = {
         Smoothness = 0.05,
@@ -26,60 +26,49 @@ local DaHoodSettings = {
 }
 getgenv().DaHoodSettings = DaHoodSettings
 
--- //
-function DaHoodSettings.ApplyPredictionFormula(SelectedPart, Velocity)
-    return SelectedPart.CFrame + (Velocity * DaHoodSettings.Prediction)
-end
+-- // Lógica de Toggle con la tecla Q
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        AimEnabled = not AimEnabled
+        -- Opcional: Para ver si funciona, mira tu consola (F9)
+        warn("AimLock State: " .. (AimEnabled and "ON" or "OFF"))
+    end
+end)
 
--- // Hook
+-- // Hook (Silent Aim)
 local __index
 __index = hookmetamethod(game, "__index", function(t, k)
-    -- // Check if it trying to get our mouse's hit or target and see if we can use it
-    if (t:IsA("Mouse") and (k == "Hit" or k == "Target") and AimingChecks.IsAvailable() and DaHoodSettings.SilentAim) then
-        -- // Vars
+    -- Solo funciona si AimEnabled es true
+    if (AimEnabled and t:IsA("Mouse") and (k == "Hit" or k == "Target") and AimingChecks.IsAvailable() and DaHoodSettings.SilentAim) then
         local SelectedPart = AimingSelected.Part
         local Hit = DaHoodSettings.ApplyPredictionFormula(SelectedPart, AimingSelected.Velocity * Vector3.new(1, 0.1, 1))
-
-        -- // Return modded val
         return (k == "Hit" and Hit or SelectedPart)
     end
-
-    -- // Return
     return __index(t, k)
 end)
 
--- // Aimlock
+-- // Aimlock position
 function AimLockSettings.AimLockPosition(CameraMode)
-    -- // Vars
-    local Position
-    local BeizerData = {}
-
-    -- // Hit to account prediction
+    if not AimEnabled then return nil, {} end -- Si está apagado, no devuelve nada
+    
     local Hit = DaHoodSettings.ApplyPredictionFormula(AimingSelected.Part)
     local HitPosition = Hit.Position
 
-    -- //
     if (CameraMode) then
-        Position = HitPosition
+        return HitPosition, {}
     else
-        -- // Convert 3d -> 2d
         local Vector, _ = CurrentCamera:WorldToViewportPoint(HitPosition)
-        local Vector2D = Vector2.new(Vector.X, Vector.Y)
-
-        -- // Vars
-        local BeizerLock = DaHoodSettings.BeizerLock
-
-        -- //
-        Position = Vector2D
-        BeizerData = {
-            Smoothness = BeizerLock.Smoothness,
-            CurvePoints = BeizerLock.CurvePoints
+        return Vector2.new(Vector.X, Vector.Y), {
+            Smoothness = DaHoodSettings.BeizerLock.Smoothness,
+            CurvePoints = DaHoodSettings.BeizerLock.CurvePoints
         }
     end
-
-    -- // Return
-    return Position, BeizerData
 end
 
--- // Return
+-- // Helper
+function DaHoodSettings.ApplyPredictionFormula(SelectedPart, Velocity)
+    return SelectedPart.CFrame + ((Velocity or Vector3.new(0,0,0)) * DaHoodSettings.Prediction)
+end
+
 return DaHoodSettings
